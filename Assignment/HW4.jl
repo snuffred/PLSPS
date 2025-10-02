@@ -69,21 +69,26 @@ function matmul_dist_3!(C, A, B)
 	p = nworkers()
 	g = m ÷ p
 	iw = 0
-	@sync for i in 0:(p-1)
+	@sync for i in 1:p
 		iw += 1
 		w = workers()[iw]
+
+		row_start = (i - 1) * g + 1
+		row_end = i * g
+		A_slice = A[row_start:row_end, :]
+
 		ftr = @spawnat w begin
-			Ci = fill(z, g, n)
+			Ci_block = fill(z, g, n)
 			for h in 1:g
 				for j in 1:n
 					for k in 1:l
-						@inbounds C[i*g+h, j] += A[i*g+h, k] * B[k, j]
+						@inbounds Ci_block[h, j] += A_slice[h, k] * B[k, j]
 					end
 				end
 			end
-            Ci
+			Ci_block
 		end
-		@async C[(i*g+1):((i+1)*g), :] = fetch(ftr)
+		@async C[row_start:row_end, :] = fetch(ftr)
 	end
 	return C
 end
